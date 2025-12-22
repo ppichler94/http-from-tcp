@@ -2,43 +2,10 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"net"
-	"strings"
+
+	"http.ppichler94.io/internal/request"
 )
-
-func getLinesChannel(f io.ReadCloser) <-chan string {
-	out := make(chan string)
-
-	go func() {
-		defer close(out)
-		defer f.Close()
-
-		buf := make([]byte, 8)
-		line := ""
-		for {
-			n, err := f.Read(buf)
-			if err != nil {
-				break
-			}
-
-			parts := strings.Split(string(buf[:n]), "\n")
-			line += parts[0]
-
-			for i := 1; i < len(parts); i++ {
-				out <- line
-				line = parts[i]
-			}
-		}
-
-		if len(line) > 0 {
-			out <- line
-		}
-
-	}()
-
-	return out
-}
 
 func main() {
 	l, err := net.Listen("tcp", ":42069")
@@ -55,9 +22,14 @@ func main() {
 			fmt.Println("Error accepting connection:", err)
 			continue
 		}
-		lines := getLinesChannel(conn)
-		for line := range lines {
-			fmt.Printf("read: %s\n", line)
+		req, err := request.RequestFromReader(conn)
+		if err != nil {
+			fmt.Println("Error reading request:", err)
+			return
 		}
+
+		fmt.Println("Request line:")
+		fmt.Printf("- Method: %s\n-Target: %v\n-Version: %v\n", req.RequestLine.Method, req.RequestLine.RequestTarget, req.RequestLine.HttpVersion)
 	}
+
 }

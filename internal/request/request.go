@@ -5,20 +5,24 @@ import (
 	"io"
 	"slices"
 	"strings"
+
+	"http.ppichler94.io/internal/headers"
 )
 
 const bufferSize = 8
 
 type Request struct {
 	RequestLine RequestLine
+	Headers     headers.Headers
 	state       requestState
 }
 
 type requestState int
 
 const (
-	Initialized requestState = 0
-	Done        requestState = 1
+	Initialized    requestState = 0
+	Done           requestState = 1
+	ParsingHeaders requestState = 2
 )
 
 type RequestLine struct {
@@ -31,13 +35,17 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	buf := make([]byte, bufferSize)
 	readToIndex := 0
 	request := &Request{
-		state: Initialized,
+		state:   Initialized,
+		Headers: headers.NewHeaders(),
 	}
 
 	for request.state != Done {
 		n, err := reader.Read(buf[readToIndex:])
 		if err != nil {
 			if err == io.EOF {
+				if request.state == ParsingHeaders {
+					return nil, errors.New("incomplete request")
+				}
 				request.state = Done
 				return request, nil
 			}
@@ -64,7 +72,23 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 }
 
 func (r *Request) parse(data []byte) (int, error) {
-	if r.state == Initialized {
+	totalBytesParsed := 0
+	for r.state != Done {
+		n, err := r.parseSingle(data[totalBytesParsed:])
+		if err != nil {
+			return 0, err
+		}
+		if n == 0 {
+			return totalBytesParsed, nil
+		}
+		totalBytesParsed += n
+	}
+	return 0, nil
+}
+
+func (r *Request) parseSingle(data []byte) (int, error) {
+	switch r.state {
+	case Initialized:
 		line, bytesRead, err := parseRequestLine(string(data))
 		if err != nil {
 			return 0, err
@@ -73,9 +97,19 @@ func (r *Request) parse(data []byte) (int, error) {
 			return 0, nil
 		}
 		r.RequestLine = line
-		r.state = Done
+		r.state = ParsingHeaders
+		return bytesRead, nil
+	case ParsingHeaders:
+		bytesRead, done, err := r.Headers.Parse(data)
+		if err != nil {
+			return 0, err
+		}
+		if done {
+			r.state = Done
+		}
 		return bytesRead, nil
 	}
+
 	return 0, nil
 }
 

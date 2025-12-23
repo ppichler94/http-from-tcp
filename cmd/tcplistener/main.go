@@ -30,6 +30,10 @@ func main() {
 
 		fmt.Println("Request line:")
 		fmt.Printf("- Method: %s\n-Target: %v\n-Version: %v\n", req.RequestLine.Method, req.RequestLine.RequestTarget, req.RequestLine.HttpVersion)
+		fmt.Println("Headers:")
+		for key, value := range req.Headers {
+			fmt.Printf("- %s: %s\n", key, value)
+		}
 	}
 
 }

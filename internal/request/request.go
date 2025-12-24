@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"slices"
+	"strconv"
 	"strings"
 
 	"http.ppichler94.io/internal/headers"
@@ -14,6 +15,7 @@ const bufferSize = 8
 type Request struct {
 	RequestLine RequestLine
 	Headers     headers.Headers
+	Body        []byte
 	state       requestState
 }
 
@@ -21,8 +23,9 @@ type requestState int
 
 const (
 	Initialized    requestState = 0
-	Done           requestState = 1
-	ParsingHeaders requestState = 2
+	ParsingHeaders requestState = 1
+	ParsingBody    requestState = 2
+	Done           requestState = 3
 )
 
 type RequestLine struct {
@@ -43,7 +46,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		n, err := reader.Read(buf[readToIndex:])
 		if err != nil {
 			if err == io.EOF {
-				if request.state == ParsingHeaders {
+				if request.state != Done {
 					return nil, errors.New("incomplete request")
 				}
 				request.state = Done
@@ -105,9 +108,26 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 			return 0, err
 		}
 		if done {
-			r.state = Done
+			r.state = ParsingBody
 		}
 		return bytesRead, nil
+	case ParsingBody:
+		if r.Headers.Get("Content-Length") == "" {
+			r.state = Done
+			return 0, nil
+		}
+		bodyLength, err := strconv.Atoi(r.Headers.Get("Content-Length"))
+		if err != nil {
+			return 0, err
+		}
+		if len(data) == bodyLength {
+			r.Body = data[:bodyLength]
+			r.state = Done
+			return bodyLength, nil
+		}
+		if len(data) > bodyLength {
+			return 0, errors.New("body too long")
+		}
 	}
 
 	return 0, nil

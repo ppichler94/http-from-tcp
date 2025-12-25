@@ -13,7 +13,7 @@ type HandlerError struct {
 	Status  response.StatusCode
 }
 
-type Handler func(w io.Writer, req *request.Request) *HandlerError
+type Handler func(w *response.Writer, req *request.Request)
 
 func (error HandlerError) write(w io.Writer) {
 	headers := response.GetDefaultHeaders(len(error.Message))

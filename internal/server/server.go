@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"fmt"
 	"net"
 	"sync/atomic"
@@ -58,27 +57,7 @@ func (s *Server) handle(conn net.Conn) {
 		return
 	}
 
-	buf := bytes.NewBuffer([]byte{})
+	writer := response.NewWriter(conn)
 
-	hErr := s.handler(buf, req)
-	if hErr != nil {
-		hErr.write(conn)
-	}
-
-	headers := response.GetDefaultHeaders(buf.Len())
-	err = response.WriteStatusLine(conn, response.OK)
-	if err != nil {
-		fmt.Println("Error writing status line:", err)
-		return
-	}
-	err = response.WriteHeaders(conn, headers)
-	if err != nil {
-		fmt.Println("Error writing headers:", err)
-		return
-	}
-	_, err = conn.Write(buf.Bytes())
-	if err != nil {
-		fmt.Println("Error writing response body:", err)
-		return
-	}
+	s.handler(&writer, req)
 }

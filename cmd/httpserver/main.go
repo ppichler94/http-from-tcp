@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -12,7 +11,7 @@ import (
 	"http.ppichler94.io/internal/server"
 )
 
-const port = 42069
+const port = 8080
 
 func main() {
 	server, err := server.Serve(port, handler)
@@ -28,28 +27,23 @@ func main() {
 	log.Println("Server gracefully stopped")
 }
 
-func handler(w io.Writer, req *request.Request) *server.HandlerError {
+func handler(w *response.Writer, req *request.Request) {
+	var message string
+	var status response.StatusCode
 	if req.RequestLine.RequestTarget == "/yourproblem" {
-		return &server.HandlerError{
-			Message: "Your problem is not my problem\n",
-			Status:  response.BadRequest,
-		}
+		message = "<html>\n  <head>\n    <title>400 Bad Request</title>\n  </head>\n  <body>\n    <h1>Bad Request</h1>\n    <p>Your request honestly kinda sucked.</p>\n  </body>\n</html>"
+		status = response.BadRequest
+	} else if req.RequestLine.RequestTarget == "/myproblem" {
+		message = "<html>\n  <head>\n    <title>500 Internal Server Error</title>\n  </head>\n  <body>\n    <h1>Internal Server Error</h1>\n    <p>Okay, you know what? This one is on me.</p>\n  </body>\n</html>"
+		status = response.ServerError
+	} else {
+		message = "<html>\n  <head>\n    <title>200 OK</title>\n  </head>\n  <body>\n    <h1>Success!</h1>\n    <p>Your request was an absolute banger.</p>\n  </body>\n</html>"
+		status = response.OK
 	}
 
-	if req.RequestLine.RequestTarget == "/myproblem" {
-		return &server.HandlerError{
-			Message: "Woopsie, my bad\n",
-			Status:  response.ServerError,
-		}
-	}
-
-	_, err := w.Write([]byte("All good, frfr\n"))
-	if err != nil {
-		return &server.HandlerError{
-			Message: err.Error(),
-			Status:  response.ServerError,
-		}
-	}
-
-	return nil
+	w.WriteStatusLine(status)
+	h := response.GetDefaultHeaders(len(message))
+	h.Set("Content-Type", "text/html")
+	w.WriteHeaders(h)
+	w.WriteBody([]byte(message))
 }
